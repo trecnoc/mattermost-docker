@@ -23,10 +23,10 @@ services:
     build:
       context: app
       # uncomment following lines for team edition or change UID/GID
-      # args:
-      #   - edition=team
-      #   - PUID=1000
-      #   - PGID=1000
+      args:
+        - edition=team
+        - PUID=1000
+        - PGID=1000
     restart: unless-stopped
     volumes:
       - ./volumes/app/mattermost/config:/mattermost/config:rw
@@ -50,15 +50,52 @@ services:
 
       # in case your config is not in default location
       #- MM_CONFIG=/mattermost/config/config.json
+    env_file:
+      - mattermost-variables.env
 
-  web:
-    build: web
+  proxy:
+    container_name: nginx
+    image: nginx:alpine
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
-    read_only: true
-    restart: unless-stopped
     volumes:
-      # This directory must have cert files if you want to enable SSL
-      - ./volumes/web/cert:/cert:ro
-      - /etc/localtime:/etc/localtime:ro
+      - ./volumes/proxy/nginx_conf:/etc/nginx/conf.d
+      - ./volumes/proxy/nginx_certs:/etc/nginx/certs
+      - ./volumes/proxy/nginx_vhost:/etc/nginx/vhost.d
+      - ./volumes/proxy/nginx_html:/usr/share/nginx/html
+
+  proxy-gen:
+    container_name: nginx-proxy-gen
+    image: jwilder/docker-gen
+    restart: unless-stopped
+    depends_on:
+      - proxy
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./volumes/proxy/nginx_conf:/etc/nginx/conf.d
+      - ./volumes/proxy/nginx_certs:/etc/nginx/certs
+      - ./volumes/proxy/nginx_vhost:/etc/nginx/vhost.d
+      - ./volumes/proxy/nginx_html:/usr/share/nginx/html
+      - ./templates:/etc/docker-gen/templates
+    command: "-notify-sighup nginx -watch /etc/docker-gen/templates/nginx.tmpl /etc/nginx/conf.d/default.conf"
+
+  letsencrypt:
+    container_name: letsencrypt
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    depends_on:
+      - proxy
+      - proxy-gen
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/proxy/nginx_certs:/etc/nginx/certs
+      - ./volumes/proxy/nginx_vhost:/etc/nginx/vhost.d
+      - ./volumes/proxy/nginx_html:/usr/share/nginx/html
+    environment:
+      - NGINX_PROXY_CONTAINER=nginx
+      - NGINX_DOCKER_GEN_CONTAINER=nginx-proxy-gen
+      - DEFAULT_EMAIL=trecnoc.azure@gmail.com
+    env_file:
+      - letsencrypt-variables.env
+

@@ -6,3 +6,6 @@
 
 # Generated data
 volumes
+
+# Variables
+*-variables.env
