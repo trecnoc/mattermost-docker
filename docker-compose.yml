@@ -84,6 +84,7 @@ services:
   letsencrypt:
     container_name: letsencrypt
     image: jrcs/letsencrypt-nginx-proxy-companion
+    restart: unless-stopped
     depends_on:
       - proxy
       - proxy-gen
